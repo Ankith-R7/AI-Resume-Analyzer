@@ -51,13 +51,23 @@ pip install selenium
 
 To use this project, follow these steps:
 
-1. Clone the repository:
-2. Install the required packages: pip install -r requirements.txt
-3. Set your Gemini API key in app.py:
-   Python
-   GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
-4. Run the Streamlit app: streamlit run app.py
-5. Access the app in your browser at http://localhost:8501
+1. Clone the repository
+2. Install the required packages: `pip install -r requirements.txt`
+3. Set your Gemini API key in `app.py` or export it as an environment variable:
+   ```bash
+   # Windows PowerShell
+   $env:GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+   ```
+4. Run the project:
+   - **Interactive Web App (Streamlit)**:
+     ```bash
+     streamlit run app.py
+     ```
+     Access the app in your browser at `http://localhost:8501`
+   - **Command Line Tool (Pure Python CLI)**:
+     ```bash
+     python cli_analyzer.py path/to/resume.pdf
+     ```
 
 <br />
 

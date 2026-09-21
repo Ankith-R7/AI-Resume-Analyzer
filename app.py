@@ -1,3 +1,4 @@
+import os
 import time
 import warnings
 from urllib.parse import quote
@@ -22,14 +23,26 @@ warnings.filterwarnings("ignore")
 # GEMINI CONFIGURATION
 # ============================================================
 
-# IMPORTANT:A
-# Replace this with your NEW Gemini API key.
-GEMINI_API_KEY = "Repalce Your API Key Here"
+# Load .env file if available locally
+if os.path.exists(".env"):
+    try:
+        with open(".env", "r", encoding="utf-8") as _env_file:
+            for _line in _env_file:
+                if _line.strip().startswith("GEMINI_API_KEY="):
+                    os.environ["GEMINI_API_KEY"] = _line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
 
-# Current model.
-# The code below also contains fallback models.
+# Replace this with your Gemini API key, or set the GEMINI_API_KEY environment variable.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip() or "Add Your API Key Here"
+
+# Current models with fallback.
 GEMINI_MODELS = [
-    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash",
     "gemini-3.5-flash-lite"
 ]
 
@@ -40,17 +53,22 @@ GEMINI_MODELS = [
 
 def get_gemini_client():
 
-    if (
-        not GEMINI_API_KEY
-        or GEMINI_API_KEY == "YOUR_NEW_GEMINI_API_KEY"
-    ):
+    api_key = GEMINI_API_KEY
+    if not api_key or api_key in [
+        "Add Your API Key Here",
+        "Add Your API Key",
+        "Replace Your API Key Here",
+        "Repalce Your API Key Here",
+        "YOUR_NEW_GEMINI_API_KEY",
+        "YOUR_GEMINI_API_KEY"
+    ]:
         raise ValueError(
-            "Please add your new Gemini API key to GEMINI_API_KEY "
-            "at the top of app.py."
+            "Please configure your Gemini API key in GEMINI_API_KEY "
+            "at the top of app.py or set the GEMINI_API_KEY environment variable."
         )
 
     return genai.Client(
-        api_key=GEMINI_API_KEY
+        api_key=api_key
     )
 
 
@@ -66,36 +84,60 @@ def ask_gemini(prompt):
 
     for model in GEMINI_MODELS:
 
-        try:
+        # Attempt each model up to 2 times with a short pause for transient spikes
+        for attempt in range(2):
 
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt
-            )
+            try:
 
-            if response and response.text:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
 
-                return response.text
+                if response and response.text:
 
-        except Exception as e:
+                    return response.text
 
-            last_error = e
+            except Exception as e:
 
-            error_text = str(e)
+                last_error = e
 
-            # If model is unavailable, try the next model.
-            if (
-                "404" in error_text
-                or "NOT_FOUND" in error_text
-                or "not available" in error_text.lower()
-            ):
-                continue
+                error_text = str(e).lower()
 
-            # API key/quota errors should not be hidden.
-            raise e
+                # If the API key is completely invalid, fail immediately
+                if "api_key_invalid" in error_text or "api key not valid" in error_text:
+                    raise e
+
+                # Detect transient capacity, rate limit, or model unavailability errors
+                is_transient = any(
+                    err in error_text for err in [
+                        "503",
+                        "unavailable",
+                        "high demand",
+                        "spikes in demand",
+                        "temporarily",
+                        "resource_exhausted",
+                        "429",
+                        "quota",
+                        "404",
+                        "not_found",
+                        "not available",
+                        "overloaded",
+                        "internal",
+                        "500"
+                    ]
+                )
+
+                if is_transient:
+                    # Short backoff before retry or switching model
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+
+                # If other non-transient error, move to next model
+                break
 
     raise RuntimeError(
-        f"Gemini could not generate a response.\n\n"
+        f"Gemini could not generate a response after trying multiple models.\n\n"
         f"Last error: {last_error}"
     )
 
@@ -1101,32 +1143,42 @@ if option != "Linkedin Jobs":
             if not is_analyzed:
                 if st.button("🚀 Analyze Resume", key="global_analyze_button", use_container_width=True):
                     try:
-                        with st.spinner("Analyzing resume with Gemini (this will take a moment)..."):
+                        with st.spinner("Analyzing resume with Gemini (running multi-section analysis, please wait)..."):
                             # Run summary
                             st.session_state["summary_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
                                 resume_analyzer.summary_prompt()
                             )
+                            time.sleep(0.6)
+
                             # Run strengths
                             st.session_state["strength_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
                                 resume_analyzer.strength_prompt()
                             )
+                            time.sleep(0.6)
+
                             # Run weaknesses
                             st.session_state["weakness_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
                                 resume_analyzer.weakness_prompt()
                             )
+                            time.sleep(0.6)
+
                             # Run job titles
                             st.session_state["job_title_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
                                 resume_analyzer.job_title_prompt()
                             )
+                            time.sleep(0.6)
+
                             # Run ATS score
                             st.session_state["ats_score_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
                                 resume_analyzer.ats_prompt()
                             )
+                            time.sleep(0.6)
+
                             # Run skills
                             st.session_state["skills_result"] = resume_analyzer.gemini(
                                 st.session_state["resume_text"],
